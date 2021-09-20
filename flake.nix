@@ -30,5 +30,7 @@
           };
         };
         defaultPackage = packages.checkup;
+        apps.checkup = flake-utils.lib.mkApp { drv = packages.checkup; };
+        defaultApp = apps.checkup;
       });
 }
