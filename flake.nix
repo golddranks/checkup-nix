@@ -23,6 +23,11 @@
               patchShebangs ./check/exec/testdata/exec.sh
             '';
 
+            postInstall = ''
+              mkdir -p $out/share/
+              cp -R ./statuspage $out/share/
+            '';
+
             pname = "checkup";
             version = "2.0.0";
 
@@ -47,69 +52,97 @@
           let checkup_cfg = config.services.checkup; in
           {
             options.services.checkup = {
+
               enable = mkEnableOption "checkup service";
+
               every = mkOption {
                 type = types.str;
                 default = "1m";
               };
-              config = mkOption {
-                type = with types; nullOr lines;
-                default = null;
+
+              checkers = mkOption {
+                type = with types; listOf (attrsOf anything);
+                default = [];
+                example = ''
+                  [
+                      {
+                          type = "http";
+                          endpoint_name = "Test";
+                          endpoint_url = "https://example.org";
+                      }
+                  ]
+                '';
+              };
+
+              storage = mkOption {
+                type = with types; attrsOf anything;
+                default = {
+                  type = "fs";
+                  dir = "/var/log/checkup";
+                };
                 example = ''
                   {
-                      "checkers": [
-                          {
-                              "type": "http",
-                              "endpoint_name": "Test",
-                              "endpoint_url": "https://example.org"
-                          },
-                      ],
-                      "storage": {
-                          "type": "fs",
-                          "dir": "/var/checkup/storage"
-                      },
-                      "notifiers": [
-                          {
-                              "type": "mailgun",
-                              "from": "checkup@example.org",
-                              "to": [ "admin@example.org" ],
-                              "subject": "Server downtime detected",
-                              "apikey": "asdfasdf",
-                              "domain": "example.org"
-                          }
-                      ]
+                      type = "fs";
+                      dir = "/var/log/checkup";
                   }
                 '';
-                description = ''
-                  JSON-based config file for Checkup.
+              };
+
+              notifiers = mkOption {
+                type = with types; listOf (attrsOf anything);
+                default = [];
+                example = ''
+                  [
+                      {
+                          type = "mailgun";
+                          from = "checkup@example.org";
+                          to = [ "admin@example.org" ];
+                          subject = "Server downtime detected";
+                          apikey = "asdfasdf";
+                          domain = "example.org";
+                      }
+                  ]
                 '';
               };
+
+              statusPagePort = mkOption {
+                type = with types; nullOr port;
+                default = null;
+                example = 3000;
+                description = "From which port to serve a status page. Pokes a hole in the firewall.";
+              };
+
             };
             config = mkIf checkup_cfg.enable {
-              users.users.checkup = {
-                description = "Checkup";
-                isSystemUser = true;
-              };
-              systemd.services.checkup = {
-                description = "checkup";
-                after = [ "network.target" ];
-                wantedBy = [ "multi-user.target" ];
-                serviceConfig.ExecStart = "${self.packages.${pkgs.system}.checkup}/bin/checkup -c ${config.environment.etc."checkup.json".source} every ${escapeShellArg checkup_cfg.every}";
-                serviceConfig.User = "checkup";
-                serviceConfig.Restart = "always";
-              };
-              environment.etc."checkup.json".text = if isString checkup_cfg.config
-                then checkup_cfg.config
-                else (''
-                  {
-                      "checkers": [],
-                      "storage": {
-                          "type": "fs",
-                          "dir": "/var/checkup/storage"
-                      },
-                      "notifiers": []
-                  }
-                '');
+                users.users.checkup = {
+                  description = "Checkup";
+                  isSystemUser = true;
+                };
+                systemd.services.checkup = {
+                  description = "checkup";
+                  after = [ "network.target" ];
+                  wantedBy = [ "multi-user.target" ];
+                  serviceConfig.ExecStart = "${self.packages.${pkgs.system}.checkup}/bin/checkup -c ${config.environment.etc."checkup.json".source} every ${escapeShellArg checkup_cfg.every}";
+                  serviceConfig.User = "checkup";
+                  serviceConfig.Restart = "always";
+                  serviceConfig.LogsDirectory = "checkup";
+                };
+                environment.etc."checkup.json".text = builtins.toJSON {
+                  checkers = checkup_cfg.checkers;
+                  storage = checkup_cfg.storage;
+                  notifiers = checkup_cfg.notifiers;
+                };
+                networking.firewall.allowedTCPPorts = if isInt checkup_cfg.statusPagePort then [ checkup_cfg.statusPagePort ] else [];
+                systemd.services.checkup-status = mkIf (isInt checkup_cfg.statusPagePort) {
+                  description = "checkup status page";
+                  after = [ "network.target" ];
+                  wantedBy = [ "multi-user.target" ];
+                  serviceConfig.ExecStart = "${self.packages.${pkgs.system}.checkup}/bin/checkup -c ${config.environment.etc."checkup.json".source} serve --listen 0.0.0.0:${toString checkup_cfg.statusPagePort}";
+                  serviceConfig.User = "checkup";
+                  serviceConfig.WorkingDirectory = "${self.packages.${pkgs.system}.checkup}/share";
+                  serviceConfig.Restart = "always";
+                  serviceConfig.LogsDirectory = "checkup";
+                };
             };
           };
       };
