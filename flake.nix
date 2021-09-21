@@ -1,6 +1,8 @@
 {
   description = "Sourcegraph Checkup";
 
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs?rev=9d0a8da8691c0f8f4831e87efee767397cce06d5";
+
   inputs.checkup = {
     url = "github:sourcegraph/checkup";
     flake = false;
