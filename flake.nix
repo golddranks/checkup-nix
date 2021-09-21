@@ -41,78 +41,76 @@
         defaultPackage = packages.checkup;
         apps.checkup = flake-utils.lib.mkApp { drv = packages.checkup; };
         defaultApp = apps.checkup;
-        nixosModules = {
-          checkup = { config, lib, pkgs, ... }:
-            with lib;
-            let checkup_cfg = config.services.checkup; in
-            {
-              options.services.checkup = {
-                enable = mkEnableOption "checkup service";
-                every = mkOption {
-                  type = types.str;
-                  default = "1m";
-                };
-                config = mkOption {
-                  type = with types; nullOr lines;
-                  default = null;
-                  example = ''
-                    {
-                        "checkers": [
-                            {
-                                "type": "http",
-                                "endpoint_name": "Test",
-                                "endpoint_url": "https://example.org"
-                            },
-                        ],
-                        "storage": {
-                            "type": "fs",
-                            "dir": "/var/checkup/storage"
-                        },
-                        "notifiers": [
-                            {
-                                "type": "mailgun",
-                                "from": "checkup@example.org",
-                                "to": [ "admin@example.org" ],
-                                "subject": "Server downtime detected",
-                                "apikey": "asdfasdf",
-                                "domain": "example.org"
-                            }
-                        ]
-                    }
-                  '';
-                  description = ''
-                    JSON-based config file for Checkup.
-                  '';
-                };
+      }) // {
+        nixosModules.checkup = { config, lib, pkgs, ... }:
+          with lib;
+          let checkup_cfg = config.services.checkup; in
+          {
+            options.services.checkup = {
+              enable = mkEnableOption "checkup service";
+              every = mkOption {
+                type = types.str;
+                default = "1m";
               };
-              config = mkIf checkup_cfg.enable {
-                users.users.checkup = {
-                  description = "Checkup";
-                  isSystemUser = true;
-                };
-                environment.etc."checkup.json".text = if isString checkup_cfg.config
-                  then checkup_cfg.config
-                  else (''
-                    {
-                        "checkers": [],
-                        "storage": {
-                            "type": "fs",
-                            "dir": "/var/checkup/storage"
-                        },
-                        "notifiers": []
-                    }
-                  '');
-                systemd.services.checkup = {
-                  description = "checkup";
-                  after = [ "network.target" ];
-                  wantedBy = [ "multi-user.target" ];
-                  serviceConfig.ExecStart = "${checkup}/bin/checkup -c ${environment.etc."checkup.json".source} every ${escapeShellArg checkup_cfg.every}";
-                  serviceConfig.WorkingDirectory = "/var/checkup";
-                  serviceConfig.User = "checkup";
-                  serviceConfig.Restart = "always";
-                };
+              config = mkOption {
+                type = with types; nullOr lines;
+                default = null;
+                example = ''
+                  {
+                      "checkers": [
+                          {
+                              "type": "http",
+                              "endpoint_name": "Test",
+                              "endpoint_url": "https://example.org"
+                          },
+                      ],
+                      "storage": {
+                          "type": "fs",
+                          "dir": "/var/checkup/storage"
+                      },
+                      "notifiers": [
+                          {
+                              "type": "mailgun",
+                              "from": "checkup@example.org",
+                              "to": [ "admin@example.org" ],
+                              "subject": "Server downtime detected",
+                              "apikey": "asdfasdf",
+                              "domain": "example.org"
+                          }
+                      ]
+                  }
+                '';
+                description = ''
+                  JSON-based config file for Checkup.
+                '';
               };
             };
-        };
-      });
+            config = mkIf checkup_cfg.enable {
+              users.users.checkup = {
+                description = "Checkup";
+                isSystemUser = true;
+              };
+              systemd.services.checkup = {
+                description = "checkup";
+                after = [ "network.target" ];
+                wantedBy = [ "multi-user.target" ];
+                serviceConfig.ExecStart = "${self.packages.${pkgs.system}.checkup}/bin/checkup -c ${config.environment.etc."checkup.json".source} every ${escapeShellArg checkup_cfg.every}";
+                serviceConfig.User = "checkup";
+                serviceConfig.Restart = "always";
+              };
+              environment.etc."checkup.json".text = if isString checkup_cfg.config
+                then checkup_cfg.config
+                else (''
+                  {
+                      "checkers": [],
+                      "storage": {
+                          "type": "fs",
+                          "dir": "/var/checkup/storage"
+                      },
+                      "notifiers": []
+                  }
+                '');
+            };
+          };
+      };
 }
