@@ -16,6 +16,11 @@
       rec {
         packages = flake-utils.lib.flattenTree {
           checkup = pkgs.buildGoModule {
+
+            preCheck = ''
+              patchShebangs ./check/exec/testdata/exec.sh
+            '';
+
             pname = "checkup";
             version = "2.0.0";
 
