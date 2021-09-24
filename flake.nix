@@ -86,7 +86,7 @@
                 default = {
                   type = "sqlite3";
                   create = true;
-                  dir = "/var/lib/checkup/sqlite.db";
+                  dsn = "/var/lib/checkup/sqlite.db";
                 };
                 example = ''
                   {
