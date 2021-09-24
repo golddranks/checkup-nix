@@ -24,11 +24,13 @@
             '';
 
             # Let's make it support sqlite by default
-            installPhase = ''
-              make build-sqlite3
+            buildPhase = ''
+              go build -o ./builds/ -tags sqlite3 ./cmd/...
             '';
 
-            postInstall = ''
+            installPhase = ''
+              mkdir -p $out/bin/
+              cp ./builds/checkup $out/bin/
               mkdir -p $out/share/
               cp -R ./statuspage $out/share/
             '';
