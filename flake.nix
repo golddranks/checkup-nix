@@ -141,7 +141,7 @@
                   storage = checkup_cfg.storage;
                   notifiers = checkup_cfg.notifiers;
                 };
-                systemd.services.checkup-status = mkIf (isStr checkup_cfg.statusPage) {
+                systemd.services.checkup-status = mkIf (isString checkup_cfg.statusPage) {
                   description = "checkup status page";
                   after = [ "network.target" ];
                   wantedBy = [ "multi-user.target" ];
