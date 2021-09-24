@@ -23,6 +23,11 @@
               patchShebangs ./check/exec/testdata/exec.sh
             '';
 
+            # Let's make it support sqlite by default
+            installPhase = ''
+              make build-sqlite3
+            '';
+
             postInstall = ''
               mkdir -p $out/share/
               cp -R ./statuspage $out/share/
@@ -77,13 +82,15 @@
               storage = mkOption {
                 type = with types; attrsOf anything;
                 default = {
-                  type = "fs";
-                  dir = "/var/log/checkup";
+                  type = "sqlite3";
+                  create = true;
+                  dir = "/var/lib/checkup/sqlite.db";
                 };
                 example = ''
                   {
-                      type = "fs";
-                      dir = "/var/log/checkup";
+                      type = "sqlite3";
+                      create = true;
+                      dsn = "/var/lib/checkup/sqlite.db";
                   }
                 '';
               };
@@ -105,11 +112,11 @@
                 '';
               };
 
-              statusPagePort = mkOption {
-                type = with types; nullOr port;
+              statusPage = mkOption {
+                type = with types; nullOr str;
                 default = null;
-                example = 3000;
-                description = "From which port to serve a status page. Pokes a hole in the firewall.";
+                example = "0.0.0.0:3000";
+                description = "Binding address and port for serving a status page. Doesn't poke a hole in the firewall; if you want to expose the status page, we recommend you to use a reverse proxy such as Nginx, as the status page is served as unencrypted HTTP.";
               };
 
             };
@@ -132,16 +139,16 @@
                   storage = checkup_cfg.storage;
                   notifiers = checkup_cfg.notifiers;
                 };
-                networking.firewall.allowedTCPPorts = if isInt checkup_cfg.statusPagePort then [ checkup_cfg.statusPagePort ] else [];
-                systemd.services.checkup-status = mkIf (isInt checkup_cfg.statusPagePort) {
+                systemd.services.checkup-status = mkIf (isStr checkup_cfg.statusPage) {
                   description = "checkup status page";
                   after = [ "network.target" ];
                   wantedBy = [ "multi-user.target" ];
-                  serviceConfig.ExecStart = "${self.packages.${pkgs.system}.checkup}/bin/checkup -c ${config.environment.etc."checkup.json".source} serve --listen 0.0.0.0:${toString checkup_cfg.statusPagePort}";
+                  serviceConfig.ExecStart = "${self.packages.${pkgs.system}.checkup}/bin/checkup -c ${config.environment.etc."checkup.json".source} serve --listen ${checkup_cfg.statusPage}";
                   serviceConfig.User = "checkup";
                   serviceConfig.WorkingDirectory = "${self.packages.${pkgs.system}.checkup}/share";
                   serviceConfig.Restart = "always";
                   serviceConfig.LogsDirectory = "checkup";
+                  serviceConfig.StateDirectory = "checkup";
                 };
             };
           };
